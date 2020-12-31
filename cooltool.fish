@@ -10,7 +10,7 @@ end
 function ct
     set_color -b black
     set_color brmagenta
-    echo "Welcome to cooltool! Your personal robust bespoke Java build tool."
+    echo "Welcome to cooltool! Your personal robust bespoke mono-directory Java build tool."
     argparse 'h/help' -- $argv
 
     if test -n "$_flag_h" #-a $_flag_h -gt 0
@@ -19,13 +19,21 @@ function ct
         # _ct_more_help
     else 
         _ct_read_cool_file
+        if test $status -eq 1
+            echo "Problem finding cooltool file (.cool). Is this a cooltools project? Maybe you meant `ct init`?"
+            return
+        end
         for cmd in $argv #remaining should be just commands
-            echo cmd is $cmd
+            #echo cmd is $cmd
             switch $cmd
+                case "help"
+                    _ct_help
                 case init
                     _ct_init
                 case reload
                     _ct_reload
+                case clean
+                    _ct_clean
                 case compile compile_main    
                     _ct_compile "main"
                 case compile_test
@@ -36,15 +44,19 @@ function ct
                     _ct_assemble
                 case "test" run_test
                     _ct_test
+                case debug_clean
+                    _ct_clean
+                    rm -fr .asdf
                 case check_file_scope
-                    echo _ct_proj_ignore
-                    echo main_java:     $_ct_proj_main_java
-                    echo main_compiled: $_ct_proj_main_compiled
-                    echo main_resource: $_ct_proj_main_resource
-                    echo test_java:     $_ct_proj_test_java
-                    echo test_compiled: $_ct_proj_test_compiled
-                    echo test_resource: $_ct_proj_test_resource
-                    echo ignore:        $_ct_proj_ignore
+                    echo "--------------------------------------"
+                    echo "    main_java: $_ct_proj_main_java"
+                    echo "main_compiled: $_ct_proj_main_compiled"
+                    echo "main_resource: $_ct_proj_main_resource"
+                    echo "    test_java: $_ct_proj_test_java"
+                    echo "test_compiled: $_ct_proj_test_compiled"
+                    echo "test_resource: $_ct_proj_test_resource"
+                    echo "       ignore: $_ct_proj_ignore"
+                    echo "--------------------------------------"
                 case "*"
                     echo "No idea what $cmd is"
             end
@@ -57,7 +69,19 @@ end
 function _ct_reload
     _ct_read_cool_file
     _ct_tag_files
-    set -xg _pt_proj_directory $PWD #make sure this doesn't change
+    set -xg _ct_proj_directory $PWD #make sure this doesn't change
+end
+
+function _ct_clean
+    for file in $_ct_proj_main_compiled
+        rm $file
+        set -e _ct_proj_main_compiled
+    end
+    for file in $_ct_proj_test_compiled
+        rm $file
+        set -e _ct_proj_test_compiled
+    end
+    rm *.jar
 end
 
 function _ct_read_cool_file
@@ -65,15 +89,22 @@ function _ct_read_cool_file
     # set important values as env variables
     if test (count $argv) -eq 0
         set file (ls | grep .cool)
-    else  
+        if test -z $file 
+            echo "returning?"
+            false #set status to 1
+            return
+        end
+    else
         set file $argv[1]
     end
     while read -la -d "\n" line
         switch $line
             case "project=*"
-                set -xg _pt_proj_name (_snip $line)
+                set -xg _ct_proj_name (_snip $line)
             case "mainclass=*"
-                set -xg _pt_mainclass (_snip $line)
+                set -xg _ct_mainclass (_snip $line)
+            case "java_version=*"
+                set -xg _ct_java_ver  (_snip $line)
             case "*"
         end
     end < $file
@@ -100,7 +131,22 @@ function _snip
 end
 
 function _ct_init
-
+    #download asdf for java version management
+    #check if init is finished already or needs repairing?
+    if test ! \( -e .asdf \) -o ! \( -d .asdf \) #if not .asdf exsits and is a dir
+        curl -o asdf.zip https://codeload.github.com/asdf-vm/asdf/zip/v0.8.0
+        unzip asdf.zip
+        mkdir .asdf
+        cp -r asdf-0.8.0/lib .asdf/lib
+        cp -r asdf-0.8.0/bin .asdf/bin
+        rm -r asdf-0.8.0
+        rm asdf.zip
+        set -l ASDF_DATA_DIR .asdf
+        .asdf/bin/asdf plugin-add java https://github.com/halcyon/asdf-java.git
+    else
+        echo "??????????????"
+    end
+    #.asdf/asdf.sh plugin add https://github.com/halcyon/asdf-java.git
 end
 
 function _ct_compile
@@ -119,7 +165,7 @@ end
 function _ct_run 
     #download java?
     #assumes we're in the correct dir
-    java $_pt_mainclass
+    java $_ct_mainclass
 end
 
 function _ct_assemble #make jar
