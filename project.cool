@@ -1,2 +1,4 @@
 project=This Example Project
 mainclass=Example
+use_local_asdf=true
+java_version=openjdk-15
